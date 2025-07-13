@@ -1,0 +1,125 @@
+local Players = game:GetService("Players")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "PetDuplicationUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Status Label
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(0, 250, 0, 30)
+statusLabel.Position = UDim2.new(0.5, -125, 0, 65)
+statusLabel.BackgroundTransparency = 1
+statusLabel.TextColor3 = Color3.fromRGB(255, 255, 255)
+statusLabel.TextScaled = true
+statusLabel.Font = Enum.Font.SourceSansBold
+statusLabel.Text = ""
+statusLabel.Parent = screenGui
+
+-- Duplicate Button (Purple & Draggable)
+local duplicateButton = Instance.new("TextButton")
+duplicateButton.Size = UDim2.new(0, 180, 0, 50)
+duplicateButton.Position = UDim2.new(0.5, -90, 0.3, -100) -- Appears above inventory
+duplicateButton.BackgroundColor3 = Color3.fromRGB(160, 90, 255)
+duplicateButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+duplicateButton.Text = "Duplicate Pet"
+duplicateButton.Font = Enum.Font.SourceSansBold
+duplicateButton.TextSize = 22
+duplicateButton.AutoButtonColor = true
+duplicateButton.Parent = screenGui
+duplicateButton.Active = true
+duplicateButton.Draggable = true
+
+-- Create local-only inventory folder (visual-only for executor)
+local function setupVisualInventory()
+	local inv = player:FindFirstChild("VisualInventory")
+	if not inv then
+		inv = Instance.new("Folder")
+		inv.Name = "VisualInventory"
+		inv.Parent = player
+	end
+	return inv
+end
+
+local visualInventory = setupVisualInventory()
+
+-- Detect held pet (must have a "Body" and "PetName" to qualify)
+local function getHeldPet()
+	local char = player.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+	for _, model in ipairs(workspace:GetChildren()) do
+		if model:IsA("Model") and model:FindFirstChild("Body") and model:FindFirstChild("PetName") then
+			local distance = (model:GetPrimaryPartCFrame().Position - char.HumanoidRootPart.Position).Magnitude
+			if distance < 6 then -- within range
+				return model
+			end
+		end
+	end
+	return nil
+end
+
+-- Create a visual duplicate of the pet
+local function createVisualPetCopy(originalPet)
+	local clone = originalPet:Clone()
+	clone.Name = originalPet.Name .. "_Copy_" .. tostring(#visualInventory:GetChildren() + 1)
+
+	for _, part in ipairs(clone:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Anchored = true
+			part.CanCollide = false
+		end
+	end
+
+	clone.Parent = visualInventory
+	return clone
+end
+
+-- Follow mouse and place
+local function placeVisualPet(pet)
+	if not pet.PrimaryPart then return end
+	local placing = true
+
+	local followConn
+	followConn = RunService.RenderStepped:Connect(function()
+		if not placing then followConn:Disconnect() return end
+		local pos = mouse.Hit.Position + Vector3.new(0, pet.PrimaryPart.Size.Y / 2, 0)
+		pet:SetPrimaryPartCFrame(CFrame.new(pos))
+	end)
+
+	local inputConn
+	inputConn = UserInputService.InputBegan:Connect(function(input, gp)
+		if gp then return end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if placing then
+				placing = false
+				followConn:Disconnect()
+				inputConn:Disconnect()
+			end
+		end
+	end)
+end
+
+-- Handle duplicate button click
+duplicateButton.MouseButton1Click:Connect(function()
+	local heldPet = getHeldPet()
+	if heldPet then
+		statusLabel.Text = "Duplicating Pet..."
+		wait(0.4)
+
+		local visualCopy = createVisualPetCopy(heldPet)
+		placeVisualPet(visualCopy)
+
+		statusLabel.Text = "✅ Added Visual Pet"
+	else
+		statusLabel.Text = "⚠️ Hold a Pet!"
+	end
+
+	wait(1.5)
+	statusLabel.Text = ""
+end)
