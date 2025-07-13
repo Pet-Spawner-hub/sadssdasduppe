@@ -136,14 +136,3 @@ dupButton.MouseButton1Click:Connect(function()
 	wait(1.5)
 	statusLabel.Text = ""
 end)
-local ReplicatedStorage = game:GetService("ReplicatedStorage")
-local addPetEvent = ReplicatedStorage:WaitForChild("AddVisualPetToInventory")
-
-addPetEvent.OnServerEvent:Connect(function(player, petData)
-	-- Add to real inventory if you're tracking it
-	print(player.Name .. " added visual pet:", petData.Name, "Age:", petData.Age, "Size:", petData.Size)
-
-	-- Example: Add to a table or Folder if using custom inventory system
-	-- You can skip saving if you want these visual only
-end)
-
