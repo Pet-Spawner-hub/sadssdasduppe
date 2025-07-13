@@ -1,0 +1,149 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local UserInputService = game:GetService("UserInputService")
+local RunService = game:GetService("RunService")
+
+local player = Players.LocalPlayer
+local mouse = player:GetMouse()
+
+-- RemoteEvent to notify server to "add" the visual pet
+local addPetEvent = ReplicatedStorage:WaitForChild("AddVisualPetToInventory")
+
+-- GUI Setup
+local screenGui = Instance.new("ScreenGui")
+screenGui.Name = "DuplicatePetUI"
+screenGui.ResetOnSpawn = false
+screenGui.Parent = player:WaitForChild("PlayerGui")
+
+-- Status label
+local statusLabel = Instance.new("TextLabel")
+statusLabel.Size = UDim2.new(0, 250, 0, 30)
+statusLabel.Position = UDim2.new(0.5, -125, 0, 70)
+statusLabel.BackgroundTransparency = 1
+statusLabel.TextColor3 = Color3.new(1, 1, 1)
+statusLabel.TextScaled = true
+statusLabel.Font = Enum.Font.SourceSansBold
+statusLabel.Text = ""
+statusLabel.Parent = screenGui
+
+-- Purple Duplicate Button
+local dupButton = Instance.new("TextButton")
+dupButton.Size = UDim2.new(0, 180, 0, 50)
+dupButton.Position = UDim2.new(0.5, -90, 0.3, -100) -- Appears above inventory
+dupButton.BackgroundColor3 = Color3.fromRGB(160, 90, 255)
+dupButton.TextColor3 = Color3.new(1, 1, 1)
+dupButton.Text = "Duplicate Pet"
+dupButton.Font = Enum.Font.SourceSansBold
+dupButton.TextSize = 22
+dupButton.Draggable = true
+dupButton.Active = true
+dupButton.Parent = screenGui
+
+-- Create visual-only inventory folder for executor
+local function setupVisualInventory()
+	local inv = player:FindFirstChild("VisualInventory")
+	if not inv then
+		inv = Instance.new("Folder")
+		inv.Name = "VisualInventory"
+		inv.Parent = player
+	end
+	return inv
+end
+
+local visualInventory = setupVisualInventory()
+
+-- Detect held pet
+local function getHeldPet()
+	local char = player.Character
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return nil end
+
+	for _, model in ipairs(workspace:GetChildren()) do
+		if model:IsA("Model") and model:FindFirstChild("Body") and model:FindFirstChild("PetName") then
+			if (model:GetPrimaryPartCFrame().p - char.HumanoidRootPart.Position).Magnitude < 6 then
+				return model
+			end
+		end
+	end
+	return nil
+end
+
+-- Clone pet visually
+local function createVisualCopy(originalPet)
+	local clone = originalPet:Clone()
+	clone.Name = originalPet.Name .. "_Visual_" .. tostring(#visualInventory:GetChildren() + 1)
+
+	for _, part in ipairs(clone:GetDescendants()) do
+		if part:IsA("BasePart") then
+			part.Anchored = true
+			part.CanCollide = false
+		end
+	end
+
+	clone.Parent = visualInventory
+	return clone
+end
+
+-- Placement system
+local function placePet(pet)
+	if not pet.PrimaryPart then return end
+	local placing = true
+
+	local conn = RunService.RenderStepped:Connect(function()
+		if not placing then conn:Disconnect() return end
+		local target = mouse.Hit.Position + Vector3.new(0, pet.PrimaryPart.Size.Y / 2, 0)
+		pet:SetPrimaryPartCFrame(CFrame.new(target))
+	end)
+
+	local inputConn
+	inputConn = UserInputService.InputBegan:Connect(function(input, processed)
+		if processed then return end
+		if input.UserInputType == Enum.UserInputType.MouseButton1 or input.UserInputType == Enum.UserInputType.Touch then
+			if placing then
+				placing = false
+				conn:Disconnect()
+				inputConn:Disconnect()
+			end
+		end
+	end)
+end
+
+-- On duplicate button click
+dupButton.MouseButton1Click:Connect(function()
+	local heldPet = getHeldPet()
+	if not heldPet then
+		statusLabel.Text = "⚠️ Hold a Pet!"
+		wait(1.5)
+		statusLabel.Text = ""
+		return
+	end
+
+	statusLabel.Text = "Duplicating Pet..."
+	wait(0.5)
+
+	-- Create and place visual copy
+	local visualPet = createVisualCopy(heldPet)
+	placePet(visualPet)
+
+	-- Add to visual inventory (client-side only)
+	local petData = {
+		Name = heldPet:FindFirstChild("PetName") and heldPet.PetName.Value or "Unknown",
+		Age = heldPet:FindFirstChild("Age") and heldPet.Age.Value or 0,
+		Size = heldPet:FindFirstChild("Size") and heldPet.Size.Value or 1,
+	}
+	addPetEvent:FireServer(petData)
+
+	statusLabel.Text = "✅ Added Visual Pet"
+	wait(1.5)
+	statusLabel.Text = ""
+end)
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local addPetEvent = ReplicatedStorage:WaitForChild("AddVisualPetToInventory")
+
+addPetEvent.OnServerEvent:Connect(function(player, petData)
+	-- Add to real inventory if you're tracking it
+	print(player.Name .. " added visual pet:", petData.Name, "Age:", petData.Age, "Size:", petData.Size)
+
+	-- Example: Add to a table or Folder if using custom inventory system
+	-- You can skip saving if you want these visual only
+end)
+
